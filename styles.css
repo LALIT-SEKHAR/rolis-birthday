@@ -208,6 +208,40 @@ h1 {
   padding: 1.4rem;
 }
 
+.memory {
+  margin-top: 1.2rem;
+  padding: 1.4rem;
+  text-align: center;
+}
+
+.memory h2 {
+  margin-top: 0;
+}
+
+.memory-photo-wrap {
+  margin: 0;
+}
+
+.memory-photo {
+  width: min(100%, 560px);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  object-fit: cover;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.memory-photo:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.42);
+}
+
+.memory figcaption {
+  margin-top: 0.7rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
 .wishes h2 {
   margin-top: 0;
   text-align: center;
