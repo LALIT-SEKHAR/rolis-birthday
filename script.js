@@ -74,6 +74,7 @@ function updateConfetti() {
 const BIRTH_MONTH_INDEX = 3; // April
 const BIRTH_DAY = 22;
 const BIRTH_YEAR = 2010;
+const CELEBRATION_YEAR = new Date().getFullYear();
 
 function getNextBirthday() {
   const now = new Date();
@@ -86,29 +87,16 @@ function getNextBirthday() {
 
 const targetDate = getNextBirthday();
 
-function getCurrentAge() {
-  const now = new Date();
-  let age = now.getFullYear() - BIRTH_YEAR;
-  const hasHadBirthdayThisYear =
-    now.getMonth() > BIRTH_MONTH_INDEX ||
-    (now.getMonth() === BIRTH_MONTH_INDEX && now.getDate() >= BIRTH_DAY);
-
-  if (!hasHadBirthdayThisYear) {
-    age -= 1;
-  }
-  return age;
-}
-
-function getTurningAge() {
-  return targetDate.getFullYear() - BIRTH_YEAR;
+function getTurningAgeForYear(year) {
+  return year - BIRTH_YEAR;
 }
 
 function updateCelebrationBadges() {
   if (celebrationYearEl) {
-    celebrationYearEl.textContent = String(targetDate.getFullYear());
+    celebrationYearEl.textContent = String(CELEBRATION_YEAR);
   }
   if (turningAgeEl) {
-    turningAgeEl.textContent = String(getTurningAge());
+    turningAgeEl.textContent = String(getTurningAgeForYear(CELEBRATION_YEAR));
   }
 }
 
@@ -117,7 +105,7 @@ function updateFunline() {
     return;
   }
 
-  const turningAge = getTurningAge();
+  const turningAge = getTurningAgeForYear(CELEBRATION_YEAR);
   const lines = [
     `Breaking news: Roli is turning ${turningAge} and the cake is nervous.`,
     `Roli turns ${turningAge} this year. Everyone act cool. (Impossible.)`,
