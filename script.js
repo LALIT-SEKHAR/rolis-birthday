@@ -1,7 +1,6 @@
-const celebrateBtn = document.getElementById("celebrate-btn");
-const musicBtn = document.getElementById("music-btn");
+const muteBtn = document.getElementById("mute-btn");
+const pauseBtn = document.getElementById("pause-btn");
 const funlineEl = document.getElementById("funline");
-const wishBtn = document.getElementById("wish-btn");
 const celebrationYearEl = document.getElementById("celebration-year");
 const turningAgeEl = document.getElementById("turning-age");
 
@@ -15,9 +14,13 @@ const ctx = canvas.getContext("2d");
 const confetti = [];
 let confettiRunning = true;
 let synthContext = null;
+let masterGain = null;
 let synthIntervals = [];
 let synthTimeouts = [];
 let synthPlaying = false;
+let awaitingUserUnlock = false;
+let lastCelebrationAt = 0;
+let isMuted = false;
 
 function setCanvasSize() {
   canvas.width = window.innerWidth;
@@ -116,7 +119,13 @@ function updateFunline() {
     `Breaking news: Roli is turning ${turningAge} and the cake is nervous.`,
     `Roli turns ${turningAge} this year. Everyone act cool. (Impossible.)`,
     `Level up unlocked: Roli ${turningAge}. New powers: extra sparkle.`,
-    `Today’s agenda: Celebrate Roli. Repeat. Add more confetti.`
+    `Today’s agenda: Celebrate Roli. Repeat. Add more confetti.`,
+    "May your snacks be endless and your homework be tiny.",
+    "May your selfies be flawless and your vibes be unstoppable.",
+    "May your birthday be louder than your alarm clock.",
+    "May you always find money in old pockets. (Manifesting.)",
+    "May your Wi‑Fi be strong and your problems be weak.",
+    "May your day be 99% fun and 1% cake crumbs."
   ];
   funlineEl.textContent = lines[Math.floor(Math.random() * lines.length)];
 }
@@ -148,15 +157,44 @@ function updateCountdown() {
   secondsEl.textContent = pad(seconds);
 }
 
-async function toggleMusic() {
-  if (!synthPlaying) {
-    startSynthTune();
-    musicBtn.textContent = "Pause Rock DJ Mix";
-    musicBtn.setAttribute("aria-pressed", "true");
-  } else {
+function setPauseButtonLabel(isPlaying) {
+  pauseBtn.textContent = isPlaying ? "Pause Music" : "Unpause Music";
+  pauseBtn.setAttribute("aria-pressed", isPlaying ? "true" : "false");
+}
+
+function showAutoplayBlockedHint() {
+  awaitingUserUnlock = true;
+  pauseBtn.textContent = "Tap to start music";
+  pauseBtn.setAttribute("aria-pressed", "false");
+}
+
+function setMuteButtonLabel() {
+  muteBtn.textContent = isMuted ? "Unmute Music" : "Mute Music";
+  muteBtn.setAttribute("aria-pressed", isMuted ? "true" : "false");
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  if (masterGain && synthContext && synthContext.state === "running") {
+    masterGain.gain.setValueAtTime(isMuted ? 0 : 1, synthContext.currentTime);
+  }
+  setMuteButtonLabel();
+}
+
+async function togglePause() {
+  if (synthPlaying) {
+    awaitingUserUnlock = false;
     stopSynthTune();
-    musicBtn.textContent = "Play Rock DJ Mix";
-    musicBtn.setAttribute("aria-pressed", "false");
+    setPauseButtonLabel(false);
+    return;
+  }
+
+  const started = await startSynthTune();
+  if (started) {
+    awaitingUserUnlock = false;
+    setPauseButtonLabel(true);
+  } else {
+    showAutoplayBlockedHint();
   }
 }
 
@@ -175,7 +213,7 @@ function playSynthNote(frequency, durationMs) {
   gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + durationMs / 1000);
 
   osc.connect(gain);
-  gain.connect(synthContext.destination);
+  gain.connect(masterGain);
   osc.start();
   osc.stop(synthContext.currentTime + durationMs / 1000 + 0.03);
 }
@@ -190,7 +228,7 @@ function playKick() {
   gain.gain.setValueAtTime(0.45, synthContext.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.16);
   osc.connect(gain);
-  gain.connect(synthContext.destination);
+  gain.connect(masterGain);
   osc.start();
   osc.stop(synthContext.currentTime + 0.17);
 }
@@ -216,7 +254,7 @@ function playSnare() {
 
   noise.connect(filter);
   filter.connect(gain);
-  gain.connect(synthContext.destination);
+  gain.connect(masterGain);
   noise.start();
   noise.stop(synthContext.currentTime + 0.11);
 }
@@ -230,7 +268,7 @@ function playHat() {
   gain.gain.setValueAtTime(0.07, synthContext.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.03);
   osc.connect(gain);
-  gain.connect(synthContext.destination);
+  gain.connect(masterGain);
   osc.start();
   osc.stop(synthContext.currentTime + 0.031);
 }
@@ -249,6 +287,7 @@ function stopSynthTune() {
     synthContext.close();
   }
   synthContext = null;
+  masterGain = null;
 }
 
 function scheduleRockDjLoop() {
@@ -281,56 +320,89 @@ function scheduleRockDjLoop() {
   synthIntervals.push(leadLoop);
 }
 
-function startSynthTune() {
+async function startSynthTune() {
   if (synthPlaying) {
-    return;
+    return true;
   }
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
-    musicBtn.textContent = "Music Unsupported";
-    return;
+    pauseBtn.textContent = "Music Unsupported";
+    return false;
   }
 
-  synthContext = new AudioContextClass();
+  if (!synthContext || synthContext.state === "closed") {
+    synthContext = new AudioContextClass();
+  }
+
+  try {
+    await synthContext.resume();
+  } catch (error) {
+    return false;
+  }
+
+  if (synthContext.state !== "running") {
+    return false;
+  }
+
+  masterGain = synthContext.createGain();
+  masterGain.gain.setValueAtTime(isMuted ? 0 : 1, synthContext.currentTime);
+  masterGain.connect(synthContext.destination);
+
   synthPlaying = true;
   scheduleRockDjLoop();
+  return true;
 }
 
-function setWish() {
-  if (!funlineEl) return;
-  const wishes = [
-    "May your snacks be endless and your homework be tiny.",
-    "May your selfies be flawless and your vibes be unstoppable.",
-    "May your birthday be louder than your alarm clock.",
-    "May you always find money in old pockets. (Manifesting.)",
-    "May your Wi‑Fi be strong and your problems be weak.",
-    "May your day be 99% fun and 1% cake crumbs."
-  ];
-  funlineEl.textContent = wishes[Math.floor(Math.random() * wishes.length)];
-  createConfettiBurst(120);
+async function tryUnlockMusic() {
+  if (!awaitingUserUnlock || synthPlaying) {
+    return;
+  }
+  const started = await startSynthTune();
+  if (started) {
+    awaitingUserUnlock = false;
+    setPauseButtonLabel(true);
+  }
+}
+
+function attachUnlockListeners() {
+  document.addEventListener("pointerdown", tryUnlockMusic);
+  document.addEventListener("keydown", tryUnlockMusic);
+  document.addEventListener("touchstart", tryUnlockMusic, { passive: true });
+}
+
+async function autoStartMusic() {
+  const started = await startSynthTune();
+  if (started) {
+    setPauseButtonLabel(true);
+  } else {
+    showAutoplayBlockedHint();
+  }
 }
 
 function launchCelebration() {
+  const now = Date.now();
+  if (now - lastCelebrationAt < 1200) {
+    return;
+  }
+  lastCelebrationAt = now;
+
   const centerX = canvas.width / 2;
   createConfettiBurst(220, centerX, canvas.height * 0.16);
   setTimeout(() => createConfettiBurst(160, canvas.width * 0.2, canvas.height * 0.22), 180);
   setTimeout(() => createConfettiBurst(160, canvas.width * 0.8, canvas.height * 0.22), 340);
-
-  celebrateBtn.textContent = "Celebrating!";
-  celebrateBtn.disabled = true;
-  setTimeout(() => {
-    celebrateBtn.textContent = "Launch Celebration";
-    celebrateBtn.disabled = false;
-  }, 900);
 }
 
-celebrateBtn.addEventListener("click", launchCelebration);
-
-musicBtn.addEventListener("click", toggleMusic);
-if (wishBtn) {
-  wishBtn.addEventListener("click", setWish);
-}
+muteBtn.addEventListener("click", toggleMute);
+pauseBtn.addEventListener("click", togglePause);
 window.addEventListener("resize", setCanvasSize);
+window.addEventListener("focus", launchCelebration);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    launchCelebration();
+  }
+});
+attachUnlockListeners();
+setMuteButtonLabel();
 
 setCanvasSize();
 createConfettiBurst(120);
@@ -339,3 +411,6 @@ updateCelebrationBadges();
 updateFunline();
 updateCountdown();
 setInterval(updateCountdown, 1000);
+setInterval(updateFunline, 5000);
+launchCelebration();
+autoStartMusic();
