@@ -1,5 +1,4 @@
 const muteBtn = document.getElementById("mute-btn");
-const pauseBtn = document.getElementById("pause-btn");
 const audio = document.getElementById("birthday-audio");
 const funlineEl = document.getElementById("funline");
 const celebrationYearEl = document.getElementById("celebration-year");
@@ -14,9 +13,8 @@ const canvas = document.getElementById("confetti-canvas");
 const ctx = canvas.getContext("2d");
 const confetti = [];
 
-let awaitingUserUnlock = false;
 let lastCelebrationAt = 0;
-let isMuted = false;
+let isMuted = true;
 
 const BIRTH_MONTH_INDEX = 3; // April
 const BIRTH_DAY = 22;
@@ -134,41 +132,18 @@ function updateCountdown() {
   secondsEl.textContent = pad(seconds);
 }
 
-function setPauseButtonLabel(isPlaying) {
-  pauseBtn.textContent = isPlaying ? "Pause Music" : "Unpause Music";
-  pauseBtn.setAttribute("aria-pressed", isPlaying ? "true" : "false");
-}
-
 function setMuteButtonLabel() {
   muteBtn.textContent = isMuted ? "Unmute Music" : "Mute Music";
   muteBtn.setAttribute("aria-pressed", isMuted ? "true" : "false");
-}
-
-function showAutoplayBlockedHint() {
-  awaitingUserUnlock = true;
-  pauseBtn.textContent = "Tap to start music";
-  pauseBtn.setAttribute("aria-pressed", "false");
 }
 
 function toggleMute() {
   isMuted = !isMuted;
   audio.muted = isMuted;
   setMuteButtonLabel();
-}
-
-async function togglePause() {
-  if (!audio.paused) {
-    audio.pause();
-    awaitingUserUnlock = false;
-    setPauseButtonLabel(false);
-    return;
-  }
-  const started = await startAudioPlayback();
-  if (started) {
-    awaitingUserUnlock = false;
-    setPauseButtonLabel(true);
-  } else {
-    showAutoplayBlockedHint();
+  // On first unmute, ensure audio is actively playing.
+  if (!isMuted && audio.paused) {
+    startAudioPlayback();
   }
 }
 
@@ -182,30 +157,8 @@ async function startAudioPlayback() {
   }
 }
 
-async function tryUnlockMusic() {
-  if (!awaitingUserUnlock || !audio.paused) {
-    return;
-  }
-  const started = await startAudioPlayback();
-  if (started) {
-    awaitingUserUnlock = false;
-    setPauseButtonLabel(true);
-  }
-}
-
-function attachUnlockListeners() {
-  document.addEventListener("pointerdown", tryUnlockMusic);
-  document.addEventListener("keydown", tryUnlockMusic);
-  document.addEventListener("touchstart", tryUnlockMusic, { passive: true });
-}
-
 async function autoStartMusic() {
-  const started = await startAudioPlayback();
-  if (started) {
-    setPauseButtonLabel(true);
-  } else {
-    showAutoplayBlockedHint();
-  }
+  await startAudioPlayback();
 }
 
 function launchCelebration() {
@@ -221,19 +174,15 @@ function launchCelebration() {
 }
 
 muteBtn.addEventListener("click", toggleMute);
-pauseBtn.addEventListener("click", togglePause);
 window.addEventListener("resize", setCanvasSize);
 window.addEventListener("focus", launchCelebration);
+window.addEventListener("focus", startAudioPlayback);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
     launchCelebration();
+    startAudioPlayback();
   }
 });
-
-audio.addEventListener("pause", () => setPauseButtonLabel(false));
-audio.addEventListener("play", () => setPauseButtonLabel(true));
-
-attachUnlockListeners();
 setMuteButtonLabel();
 setCanvasSize();
 createConfettiBurst(120);

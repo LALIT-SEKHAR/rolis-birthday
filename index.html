@@ -43,7 +43,6 @@
 
       <div class="controls">
         <button id="mute-btn" class="btn ghost" aria-pressed="false">Mute Music</button>
-        <button id="pause-btn" class="btn secondary" aria-pressed="false">Pause Music</button>
       </div>
 
       <div class="countdown-wrap">
@@ -120,7 +119,7 @@
     </section>
   </main>
 
-  <audio id="birthday-audio" preload="auto" loop>
+  <audio id="birthday-audio" preload="auto" loop autoplay muted playsinline>
     <source src="assets/birthday-rock.mp3" type="audio/mpeg">
   </audio>
 
