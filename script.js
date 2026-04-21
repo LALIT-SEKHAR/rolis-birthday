@@ -1,5 +1,4 @@
-const muteBtn = document.getElementById("mute-btn");
-const pauseBtn = document.getElementById("pause-btn");
+const audio = document.getElementById("birthday-audio");
 const funlineEl = document.getElementById("funline");
 const celebrationYearEl = document.getElementById("celebration-year");
 const turningAgeEl = document.getElementById("turning-age");
@@ -12,15 +11,16 @@ const secondsEl = document.getElementById("seconds");
 const canvas = document.getElementById("confetti-canvas");
 const ctx = canvas.getContext("2d");
 const confetti = [];
-let confettiRunning = true;
-let synthContext = null;
-let masterGain = null;
-let synthIntervals = [];
-let synthTimeouts = [];
-let synthPlaying = false;
+
 let awaitingUserUnlock = false;
 let lastCelebrationAt = 0;
 let isMuted = false;
+
+const BIRTH_MONTH_INDEX = 3; // April
+const BIRTH_DAY = 22;
+const BIRTH_YEAR = 2010;
+const CELEBRATION_YEAR = new Date().getFullYear();
+const targetDate = getNextBirthday();
 
 function setCanvasSize() {
   canvas.width = window.innerWidth;
@@ -40,8 +40,6 @@ function createConfettiBurst(count = 140, centerX = null, centerY = null) {
       x: burstX + randomRange(-70, 70),
       y: burstY + randomRange(-30, 30),
       r: randomRange(3, 8),
-      d: randomRange(1, 2.8),
-      tilt: randomRange(-12, 12),
       color: `hsl(${Math.floor(randomRange(0, 360))}, 90%, 65%)`,
       vx: randomRange(-3.2, 3.2),
       vy: randomRange(1.6, 4.6),
@@ -61,29 +59,19 @@ function drawConfettiPiece(piece) {
 
 function updateConfetti() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   for (let i = confetti.length - 1; i >= 0; i -= 1) {
     const piece = confetti[i];
     piece.x += piece.vx;
     piece.y += piece.vy;
     piece.rotation += 0.08;
-
     if (piece.y > canvas.height + 40) {
       confetti.splice(i, 1);
       continue;
     }
     drawConfettiPiece(piece);
   }
-
-  if (confettiRunning) {
-    requestAnimationFrame(updateConfetti);
-  }
+  requestAnimationFrame(updateConfetti);
 }
-
-const BIRTH_MONTH_INDEX = 3; // April
-const BIRTH_DAY = 22;
-const BIRTH_YEAR = 2010;
-const CELEBRATION_YEAR = new Date().getFullYear();
 
 function getNextBirthday() {
   const now = new Date();
@@ -94,32 +82,21 @@ function getNextBirthday() {
   return next;
 }
 
-const targetDate = getNextBirthday();
-
 function getTurningAgeForYear(year) {
   return year - BIRTH_YEAR;
 }
 
 function updateCelebrationBadges() {
-  if (celebrationYearEl) {
-    celebrationYearEl.textContent = String(CELEBRATION_YEAR);
-  }
-  if (turningAgeEl) {
-    turningAgeEl.textContent = String(getTurningAgeForYear(CELEBRATION_YEAR));
-  }
+  celebrationYearEl.textContent = String(CELEBRATION_YEAR);
+  turningAgeEl.textContent = String(getTurningAgeForYear(CELEBRATION_YEAR));
 }
 
 function updateFunline() {
-  if (!funlineEl) {
-    return;
-  }
-
   const turningAge = getTurningAgeForYear(CELEBRATION_YEAR);
   const lines = [
     `Breaking news: Roli is turning ${turningAge} and the cake is nervous.`,
     `Roli turns ${turningAge} this year. Everyone act cool. (Impossible.)`,
     `Level up unlocked: Roli ${turningAge}. New powers: extra sparkle.`,
-    `Today’s agenda: Celebrate Roli. Repeat. Add more confetti.`,
     "May your snacks be endless and your homework be tiny.",
     "May your selfies be flawless and your vibes be unstoppable.",
     "May your birthday be louder than your alarm clock.",
@@ -144,13 +121,11 @@ function updateCountdown() {
     secondsEl.textContent = "00";
     return;
   }
-
   const totalSeconds = Math.floor(diff / 1000);
   const days = Math.floor(totalSeconds / (3600 * 24));
   const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-
   daysEl.textContent = pad(days);
   hoursEl.textContent = pad(hours);
   minutesEl.textContent = pad(minutes);
@@ -162,34 +137,31 @@ function setPauseButtonLabel(isPlaying) {
   pauseBtn.setAttribute("aria-pressed", isPlaying ? "true" : "false");
 }
 
+function setMuteButtonLabel() {
+  muteBtn.textContent = isMuted ? "Unmute Music" : "Mute Music";
+  muteBtn.setAttribute("aria-pressed", isMuted ? "true" : "false");
+}
+
 function showAutoplayBlockedHint() {
   awaitingUserUnlock = true;
   pauseBtn.textContent = "Tap to start music";
   pauseBtn.setAttribute("aria-pressed", "false");
 }
 
-function setMuteButtonLabel() {
-  muteBtn.textContent = isMuted ? "Unmute Music" : "Mute Music";
-  muteBtn.setAttribute("aria-pressed", isMuted ? "true" : "false");
-}
-
 function toggleMute() {
   isMuted = !isMuted;
-  if (masterGain && synthContext && synthContext.state === "running") {
-    masterGain.gain.setValueAtTime(isMuted ? 0 : 1, synthContext.currentTime);
-  }
+  audio.muted = isMuted;
   setMuteButtonLabel();
 }
 
 async function togglePause() {
-  if (synthPlaying) {
+  if (!audio.paused) {
+    audio.pause();
     awaitingUserUnlock = false;
-    stopSynthTune();
     setPauseButtonLabel(false);
     return;
   }
-
-  const started = await startSynthTune();
+  const started = await startAudioPlayback();
   if (started) {
     awaitingUserUnlock = false;
     setPauseButtonLabel(true);
@@ -198,166 +170,21 @@ async function togglePause() {
   }
 }
 
-function playSynthNote(frequency, durationMs) {
-  if (!synthContext) {
-    return;
-  }
-
-  const osc = synthContext.createOscillator();
-  const gain = synthContext.createGain();
-  osc.type = "triangle";
-  osc.frequency.value = frequency;
-
-  gain.gain.setValueAtTime(0.0001, synthContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.11, synthContext.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + durationMs / 1000);
-
-  osc.connect(gain);
-  gain.connect(masterGain);
-  osc.start();
-  osc.stop(synthContext.currentTime + durationMs / 1000 + 0.03);
-}
-
-function playKick() {
-  if (!synthContext) return;
-  const osc = synthContext.createOscillator();
-  const gain = synthContext.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(140, synthContext.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(45, synthContext.currentTime + 0.15);
-  gain.gain.setValueAtTime(0.45, synthContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.16);
-  osc.connect(gain);
-  gain.connect(masterGain);
-  osc.start();
-  osc.stop(synthContext.currentTime + 0.17);
-}
-
-function playSnare() {
-  if (!synthContext) return;
-  const bufferSize = synthContext.sampleRate * 0.12;
-  const buffer = synthContext.createBuffer(1, bufferSize, synthContext.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i += 1) {
-    data[i] = Math.random() * 2 - 1;
-  }
-
-  const noise = synthContext.createBufferSource();
-  noise.buffer = buffer;
-  const filter = synthContext.createBiquadFilter();
-  filter.type = "highpass";
-  filter.frequency.value = 1300;
-
-  const gain = synthContext.createGain();
-  gain.gain.setValueAtTime(0.22, synthContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.1);
-
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(masterGain);
-  noise.start();
-  noise.stop(synthContext.currentTime + 0.11);
-}
-
-function playHat() {
-  if (!synthContext) return;
-  const osc = synthContext.createOscillator();
-  const gain = synthContext.createGain();
-  osc.type = "square";
-  osc.frequency.value = 6000;
-  gain.gain.setValueAtTime(0.07, synthContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.03);
-  osc.connect(gain);
-  gain.connect(masterGain);
-  osc.start();
-  osc.stop(synthContext.currentTime + 0.031);
-}
-
-function clearSynthTimers() {
-  synthIntervals.forEach((id) => clearInterval(id));
-  synthTimeouts.forEach((id) => clearTimeout(id));
-  synthIntervals = [];
-  synthTimeouts = [];
-}
-
-function stopSynthTune() {
-  synthPlaying = false;
-  clearSynthTimers();
-  if (synthContext && synthContext.state !== "closed") {
-    synthContext.close();
-  }
-  synthContext = null;
-  masterGain = null;
-}
-
-function scheduleRockDjLoop() {
-  const bpm = 122;
-  const beatMs = 60000 / bpm;
-  let step = 0;
-  const leadNotes = [392, 440, 494, 523, 587, 523, 494, 440];
-
-  const beatLoop = setInterval(() => {
-    if (!synthPlaying) return;
-    const beat = step % 8;
-    if (beat === 0 || beat === 4) playKick();
-    if (beat === 2 || beat === 6) playSnare();
-    playHat();
-    step += 1;
-  }, beatMs / 2);
-  synthIntervals.push(beatLoop);
-
-  const leadLoop = setInterval(() => {
-    if (!synthPlaying) return;
-    leadNotes.forEach((freq, i) => {
-      const t = setTimeout(() => {
-        if (synthPlaying) {
-          playSynthNote(freq, 220);
-        }
-      }, i * beatMs);
-      synthTimeouts.push(t);
-    });
-  }, beatMs * 8);
-  synthIntervals.push(leadLoop);
-}
-
-async function startSynthTune() {
-  if (synthPlaying) {
-    return true;
-  }
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) {
-    pauseBtn.textContent = "Music Unsupported";
-    return false;
-  }
-
-  if (!synthContext || synthContext.state === "closed") {
-    synthContext = new AudioContextClass();
-  }
-
+async function startAudioPlayback() {
   try {
-    await synthContext.resume();
+    audio.muted = isMuted;
+    await audio.play();
+    return true;
   } catch (error) {
     return false;
   }
-
-  if (synthContext.state !== "running") {
-    return false;
-  }
-
-  masterGain = synthContext.createGain();
-  masterGain.gain.setValueAtTime(isMuted ? 0 : 1, synthContext.currentTime);
-  masterGain.connect(synthContext.destination);
-
-  synthPlaying = true;
-  scheduleRockDjLoop();
-  return true;
 }
 
 async function tryUnlockMusic() {
-  if (!awaitingUserUnlock || synthPlaying) {
+  if (!awaitingUserUnlock || !audio.paused) {
     return;
   }
-  const started = await startSynthTune();
+  const started = await startAudioPlayback();
   if (started) {
     awaitingUserUnlock = false;
     setPauseButtonLabel(true);
@@ -371,7 +198,7 @@ function attachUnlockListeners() {
 }
 
 async function autoStartMusic() {
-  const started = await startSynthTune();
+  const started = await startAudioPlayback();
   if (started) {
     setPauseButtonLabel(true);
   } else {
@@ -385,7 +212,6 @@ function launchCelebration() {
     return;
   }
   lastCelebrationAt = now;
-
   const centerX = canvas.width / 2;
   createConfettiBurst(220, centerX, canvas.height * 0.16);
   setTimeout(() => createConfettiBurst(160, canvas.width * 0.2, canvas.height * 0.22), 180);
@@ -401,9 +227,12 @@ document.addEventListener("visibilitychange", () => {
     launchCelebration();
   }
 });
+
+audio.addEventListener("pause", () => setPauseButtonLabel(false));
+audio.addEventListener("play", () => setPauseButtonLabel(true));
+
 attachUnlockListeners();
 setMuteButtonLabel();
-
 setCanvasSize();
 createConfettiBurst(120);
 updateConfetti();
