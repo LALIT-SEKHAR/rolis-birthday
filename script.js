@@ -1,6 +1,5 @@
 const celebrateBtn = document.getElementById("celebrate-btn");
 const musicBtn = document.getElementById("music-btn");
-const audio = document.getElementById("birthday-audio");
 const funlineEl = document.getElementById("funline");
 const wishBtn = document.getElementById("wish-btn");
 const celebrationYearEl = document.getElementById("celebration-year");
@@ -150,28 +149,14 @@ function updateCountdown() {
 }
 
 async function toggleMusic() {
-  try {
-    if (audio.paused) {
-      stopSynthTune();
-      await audio.play();
-      musicBtn.textContent = "Pause Music";
-      musicBtn.setAttribute("aria-pressed", "true");
-    } else {
-      audio.pause();
-      stopSynthTune();
-      musicBtn.textContent = "Play Music";
-      musicBtn.setAttribute("aria-pressed", "false");
-    }
-  } catch (error) {
-    if (!synthPlaying) {
-      startSynthTune();
-      musicBtn.textContent = "Pause Music";
-      musicBtn.setAttribute("aria-pressed", "true");
-    } else {
-      stopSynthTune();
-      musicBtn.textContent = "Play Music";
-      musicBtn.setAttribute("aria-pressed", "false");
-    }
+  if (!synthPlaying) {
+    startSynthTune();
+    musicBtn.textContent = "Pause Rock DJ Mix";
+    musicBtn.setAttribute("aria-pressed", "true");
+  } else {
+    stopSynthTune();
+    musicBtn.textContent = "Play Rock DJ Mix";
+    musicBtn.setAttribute("aria-pressed", "false");
   }
 }
 
@@ -195,6 +180,61 @@ function playSynthNote(frequency, durationMs) {
   osc.stop(synthContext.currentTime + durationMs / 1000 + 0.03);
 }
 
+function playKick() {
+  if (!synthContext) return;
+  const osc = synthContext.createOscillator();
+  const gain = synthContext.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(140, synthContext.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(45, synthContext.currentTime + 0.15);
+  gain.gain.setValueAtTime(0.45, synthContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.16);
+  osc.connect(gain);
+  gain.connect(synthContext.destination);
+  osc.start();
+  osc.stop(synthContext.currentTime + 0.17);
+}
+
+function playSnare() {
+  if (!synthContext) return;
+  const bufferSize = synthContext.sampleRate * 0.12;
+  const buffer = synthContext.createBuffer(1, bufferSize, synthContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i += 1) {
+    data[i] = Math.random() * 2 - 1;
+  }
+
+  const noise = synthContext.createBufferSource();
+  noise.buffer = buffer;
+  const filter = synthContext.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 1300;
+
+  const gain = synthContext.createGain();
+  gain.gain.setValueAtTime(0.22, synthContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.1);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(synthContext.destination);
+  noise.start();
+  noise.stop(synthContext.currentTime + 0.11);
+}
+
+function playHat() {
+  if (!synthContext) return;
+  const osc = synthContext.createOscillator();
+  const gain = synthContext.createGain();
+  osc.type = "square";
+  osc.frequency.value = 6000;
+  gain.gain.setValueAtTime(0.07, synthContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, synthContext.currentTime + 0.03);
+  osc.connect(gain);
+  gain.connect(synthContext.destination);
+  osc.start();
+  osc.stop(synthContext.currentTime + 0.031);
+}
+
 function clearSynthTimers() {
   synthIntervals.forEach((id) => clearInterval(id));
   synthTimeouts.forEach((id) => clearTimeout(id));
@@ -211,32 +251,34 @@ function stopSynthTune() {
   synthContext = null;
 }
 
-function scheduleHappyBirthdayLoop() {
-  const notes = [
-    { f: 392, d: 320, p: 0 }, { f: 392, d: 220, p: 360 }, { f: 440, d: 520, p: 620 },
-    { f: 392, d: 520, p: 1180 }, { f: 523, d: 520, p: 1760 }, { f: 494, d: 840, p: 2340 },
-    { f: 392, d: 320, p: 3340 }, { f: 392, d: 220, p: 3700 }, { f: 440, d: 520, p: 3960 },
-    { f: 392, d: 520, p: 4520 }, { f: 587, d: 520, p: 5100 }, { f: 523, d: 840, p: 5680 },
-    { f: 392, d: 320, p: 6680 }, { f: 392, d: 220, p: 7040 }, { f: 784, d: 520, p: 7300 },
-    { f: 659, d: 520, p: 7860 }, { f: 523, d: 520, p: 8440 }, { f: 494, d: 520, p: 9020 },
-    { f: 440, d: 840, p: 9600 }
-  ];
-  const loopLength = 10600;
+function scheduleRockDjLoop() {
+  const bpm = 122;
+  const beatMs = 60000 / bpm;
+  let step = 0;
+  const leadNotes = [392, 440, 494, 523, 587, 523, 494, 440];
 
-  const playSequence = () => {
-    notes.forEach((note) => {
+  const beatLoop = setInterval(() => {
+    if (!synthPlaying) return;
+    const beat = step % 8;
+    if (beat === 0 || beat === 4) playKick();
+    if (beat === 2 || beat === 6) playSnare();
+    playHat();
+    step += 1;
+  }, beatMs / 2);
+  synthIntervals.push(beatLoop);
+
+  const leadLoop = setInterval(() => {
+    if (!synthPlaying) return;
+    leadNotes.forEach((freq, i) => {
       const t = setTimeout(() => {
         if (synthPlaying) {
-          playSynthNote(note.f, note.d);
+          playSynthNote(freq, 220);
         }
-      }, note.p);
+      }, i * beatMs);
       synthTimeouts.push(t);
     });
-  };
-
-  playSequence();
-  const loopId = setInterval(playSequence, loopLength);
-  synthIntervals.push(loopId);
+  }, beatMs * 8);
+  synthIntervals.push(leadLoop);
 }
 
 function startSynthTune() {
@@ -251,7 +293,7 @@ function startSynthTune() {
 
   synthContext = new AudioContextClass();
   synthPlaying = true;
-  scheduleHappyBirthdayLoop();
+  scheduleRockDjLoop();
 }
 
 function setWish() {
