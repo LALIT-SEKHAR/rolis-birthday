@@ -1,6 +1,7 @@
 const celebrateBtn = document.getElementById("celebrate-btn");
 const musicBtn = document.getElementById("music-btn");
 const audio = document.getElementById("birthday-audio");
+const ageLineEl = document.getElementById("age-line");
 
 const daysEl = document.getElementById("days");
 const hoursEl = document.getElementById("hours");
@@ -67,9 +68,13 @@ function updateConfetti() {
   }
 }
 
+const BIRTH_MONTH_INDEX = 3; // April
+const BIRTH_DAY = 22;
+const BIRTH_YEAR = 2010;
+
 function getNextBirthday() {
   const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 365);
+  const next = new Date(now.getFullYear(), BIRTH_MONTH_INDEX, BIRTH_DAY);
   if (next <= now) {
     next.setFullYear(next.getFullYear() + 1);
   }
@@ -77,6 +82,27 @@ function getNextBirthday() {
 }
 
 const targetDate = getNextBirthday();
+
+function getCurrentAge() {
+  const now = new Date();
+  let age = now.getFullYear() - BIRTH_YEAR;
+  const hasHadBirthdayThisYear =
+    now.getMonth() > BIRTH_MONTH_INDEX ||
+    (now.getMonth() === BIRTH_MONTH_INDEX && now.getDate() >= BIRTH_DAY);
+
+  if (!hasHadBirthdayThisYear) {
+    age -= 1;
+  }
+  return age;
+}
+
+function updateAgeLine() {
+  if (!ageLineEl) {
+    return;
+  }
+  const currentAge = getCurrentAge();
+  ageLineEl.textContent = `- Turning ${currentAge + 1} on the next birthday!`;
+}
 
 function pad(num) {
   return String(num).padStart(2, "0");
@@ -131,5 +157,6 @@ window.addEventListener("resize", setCanvasSize);
 setCanvasSize();
 createConfettiBurst(120);
 updateConfetti();
+updateAgeLine();
 updateCountdown();
 setInterval(updateCountdown, 1000);
